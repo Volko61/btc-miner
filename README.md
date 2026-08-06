@@ -1,0 +1,80 @@
+# btc-miner
+
+Image Docker de minage **Bitcoin (SHA-256d)** sur GPU NVIDIA, compilée pour
+**RTX 5090 / Blackwell (`sm_120`)**, destinée à tourner sur SaladCloud.
+
+> Projet de vulgarisation pour une vidéo YouTube. Le minage Bitcoin sur GPU
+> n'est **pas rentable** : une RTX 5090 fait ~2-3 GH/s contre ~200 TH/s pour un
+> ASIC Antminer S21. C'est le sujet de la vidéo, pas un accident.
+
+## Pourquoi une image maison
+
+Toutes les images ccminer publiques datent de 2017-2021 et sont compilées pour
+`sm_61`/`sm_86` maximum. Le `Makefile.am` de tpruvot/ccminer cible même en dur
+des architectures `compute_30` / `compute_35` que **CUDA 12 ne supporte plus**.
+Le Dockerfile réécrit toutes les archs vers `sm_120` avant de compiler.
+
+## Build
+
+Le build tourne sur GitHub Actions (`.github/workflows/build.yml`) et pousse
+l'image sur GHCR :
+
+```
+ghcr.io/volko61/btc-miner:latest
+```
+
+Penser à passer le package en **public** : repo → Packages → btc-miner →
+Package settings → Change visibility. Sinon Salad ne peut pas le pull.
+
+## Config SaladCloud
+
+| Champ | Valeur |
+|---|---|
+| Image Source | `ghcr.io/volko61/btc-miner:latest` |
+| GPU | RTX 5090 |
+| vCPU / RAM | 2 vCPU / 4 GB |
+| Replicas | 10 |
+| Networking | port `4068` (seulement si monitoring custom) |
+
+### Variables d'environnement
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `POOL` | `stratum+tcp://stratum.braiins.com:3333` | Pool Bitcoin |
+| `WORKER` | `Volko61.salad` | Nom du worker (visible dans le dashboard) |
+| `PASSWORD` | `x` | Ignoré par Braiins |
+| `ALGO` | `sha256d` | Algo Bitcoin |
+
+Braiins accepte les très petits hashrates (c'est le pool des Bitaxe), donc le
+même compte encaisse l'ESP32, les PC de bureau et les GPU Salad.
+
+Convention de nommage pour tout voir séparément dans un seul dashboard :
+
+- `Volko61.esp32`
+- `Volko61.pc1` … `Volko61.pc10`
+- `Volko61.salad`
+
+## Suivi en temps réel
+
+1. **Dashboard Braiins** — hashrate live + satoshis accumulés. C'est le plan de
+   coupe principal.
+2. **Logs Salad** — ccminer écrit en continu sur stdout :
+   `GPU #0: NVIDIA GeForce RTX 5090, 2847.32 MH/s`
+3. **API ccminer** sur le port `4068` (`--api-bind`) — pour alimenter un
+   compteur animé maison. Poller les replicas et sommer.
+
+## Ordres de grandeur
+
+| Matériel | Hashrate |
+|---|---|
+| ESP32 | 50 kH/s |
+| 1× RTX 5090 | ~2.5 GH/s |
+| 10× RTX 5090 | ~25 GH/s |
+| 1× Antminer S21 | ~200 TH/s |
+
+À 25 GH/s, le temps moyen pour trouver un bloc se compte en **centaines de
+milliers d'années**. Vérifier la difficulté du jour sur
+[mempool.space](https://mempool.space) avant d'annoncer un chiffre précis :
+elle change toutes les deux semaines.
+
+Coût : 10 × $0.35/h = **$3.50/h**, soit ~$84/jour.
