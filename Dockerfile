@@ -30,7 +30,11 @@ RUN ./autogen.sh \
  && ./configure CXXFLAGS="-O3" --with-crypto --with-curl \
  && make -j"$(nproc)" \
  && strip ccminer \
- && ./ccminer --version
+ && test -x ccminer \
+ && ldd ccminer | grep -q libcudart \
+ && echo "OK: binaire ccminer produit et lie a CUDA"
+# Pas de "./ccminer --version" ici : libcuda.so.1 vient du driver NVIDIA,
+# absent du conteneur de build. Le binaire ne peut s'executer que sur un hote GPU.
 
 # Le runtime doit etre >= 12 pour que le driver Blackwell charge la lib,
 # mais le binaire compile en PTX 11.8 reste compatible.
