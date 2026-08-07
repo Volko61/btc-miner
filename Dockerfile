@@ -5,7 +5,10 @@
 # 11.8 ne connait pas sm_120 (Blackwell / RTX 5090). On compile donc en PTX
 # pur pour compute_86 : le driver de la 5090 le recompile en SASS sm_120 au
 # lancement (forward compatibility PTX). Quelques secondes de JIT au demarrage.
-FROM nvidia/cuda:11.8.0-devel-ubuntu22.04 AS build
+# Ubuntu 20.04 => GCC 9, le compilateur contemporain de ccminer. GCC 11+ refuse
+# le code (ex: blake2s.c "size of array element is not a multiple of its
+# alignment") que GCC 9 accepte sans broncher.
+FROM nvidia/cuda:11.8.0-devel-ubuntu20.04 AS build
 
 ENV DEBIAN_FRONTEND=noninteractive
 
