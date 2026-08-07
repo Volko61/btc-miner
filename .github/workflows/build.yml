@@ -37,7 +37,12 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          # GHCR exige un nom de repo en minuscules ("Volko61" est rejete)
-          tags: ghcr.io/volko61/btc-miner:latest
+          # GHCR exige un nom de repo en minuscules ("Volko61" est rejete).
+          # Le tag par SHA permet d'epingler une version precise cote Salad :
+          # avec :latest seul, impossible de garantir qu'un noeud a bien tire
+          # la nouvelle image plutot qu'un cache.
+          tags: |
+            ghcr.io/volko61/btc-miner:latest
+            ghcr.io/volko61/btc-miner:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

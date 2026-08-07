@@ -101,11 +101,29 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+class DualStackHTTPServer(HTTPServer):
+    """
+    La passerelle SaladCloud contacte les conteneurs en IPv6 uniquement
+    ("Our load balancing operates through IPv6"). Un serveur lie a 0.0.0.0
+    n'est jamais joignable : la passerelle renvoie 503 en permanence.
+    On ecoute donc sur :: en desactivant V6ONLY, ce qui couvre IPv6 ET IPv4.
+    """
+
+    address_family = socket.AF_INET6
+
+    def server_bind(self):
+        try:
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        except (AttributeError, OSError):
+            pass  # pile IPv4 seule : on continue en degrade
+        HTTPServer.server_bind(self)
+
+
 def main():
     STATE["gpu"] = detect_gpu()
-    print(f"[status] GPU detecte : {STATE['gpu']}", flush=True)
-    print(f"[status] ecoute sur 0.0.0.0:{HTTP_PORT}", flush=True)
-    HTTPServer(("0.0.0.0", HTTP_PORT), Handler).serve_forever()
+    print("[status] GPU detecte : %s" % STATE["gpu"], flush=True)
+    print("[status] ecoute sur [::]:%d (double pile)" % HTTP_PORT, flush=True)
+    DualStackHTTPServer(("::", HTTP_PORT), Handler).serve_forever()
 
 
 if __name__ == "__main__":
