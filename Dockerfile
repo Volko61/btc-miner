@@ -44,8 +44,12 @@ RUN ./autogen.sh \
 FROM nvidia/cuda:11.8.0-runtime-ubuntu20.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      libcurl4 libjansson4 libgomp1 libssl1.1 ca-certificates python3-minimal \
+      libcurl4 libjansson4 libgomp1 libssl1.1 ca-certificates python3 \
  && rm -rf /var/lib/apt/lists/*
+
+# python3-minimal ne suffit PAS : il n'embarque ni http.server ni json, et
+# status.py mourait a l'import sans que ca se voie (lance en arriere-plan).
+RUN python3 -c "import http.server, json, socket, subprocess; print('OK: stdlib complete')"
 
 COPY --from=build /src/ccminer /usr/local/bin/ccminer
 COPY status.py /usr/local/bin/status.py
@@ -73,6 +77,7 @@ EXPOSE 8080
 
 # ccminer en avant-plan (c'est lui qui doit faire vivre ou mourir le conteneur),
 # la passerelle en tache de fond.
-CMD python3 /usr/local/bin/status.py & \
+CMD { python3 /usr/local/bin/status.py \
+        || echo "[status] LA PASSERELLE A QUITTE (code $?) — /status restera muet" ; } & \
     exec ccminer -a "$ALGO" -o "$POOL" -u "$WORKER" -p "$PASSWORD" \
       --api-bind 127.0.0.1:4068 -r -1 -R 10
