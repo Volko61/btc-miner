@@ -9,22 +9,31 @@ Image Docker de minage **Bitcoin (SHA-256d)** sur GPU NVIDIA, compilée pour
 
 ## Pourquoi une image maison
 
-Toutes les images ccminer publiques datent de 2017-2021 et sont compilées pour
-`sm_61`/`sm_86` maximum. Le `Makefile.am` de tpruvot/ccminer cible même en dur
-des architectures `compute_30` / `compute_35` que **CUDA 12 ne supporte plus**.
-Le Dockerfile réécrit toutes les archs vers `sm_120` avant de compiler.
+Toutes les images ccminer publiques datent de 2017-2021 et ne tournent pas sur
+Blackwell. Reconstruire n'est pas trivial, ccminer étant du code de 2018 :
+
+| Obstacle | Solution retenue |
+|---|---|
+| CUDA 12 a supprimé l'API texture (`texture<>`, `cudaBindTexture`, `tex1Dfetch`), utilisée massivement par ccminer | Build sur **CUDA 11.8**, dernière version à la supporter |
+| CUDA 11.8 ne connaît pas `sm_120` (RTX 5090) | Compilation en **PTX `compute_86`** ; le driver de la 5090 le recompile en SASS natif au lancement (forward compatibility) |
+| GCC 11 refuse l'alignement de `sph/blake2s.c` | Stage de build sur **Ubuntu 20.04 / GCC 9** |
+| Le `Makefile.am` cible `compute_30`/`compute_35`, morts depuis CUDA 11 | Réécriture par `sed` vers `compute_86` |
+
+Conséquence : quelques secondes de JIT au premier démarrage sur chaque nœud
+(`CUDA_CACHE_MAXSIZE` est réglé pour que le SASS soit mis en cache ensuite).
 
 ## Build
 
 Le build tourne sur GitHub Actions (`.github/workflows/build.yml`) et pousse
-l'image sur GHCR :
+l'image sur GHCR. Le package est **public**, donc Salad la tire sans
+authentification :
 
 ```
 ghcr.io/volko61/btc-miner:latest
 ```
 
-Penser à passer le package en **public** : repo → Packages → btc-miner →
-Package settings → Change visibility. Sinon Salad ne peut pas le pull.
+`linux/amd64`, 11 couches, ~2.2 Go compressé. Tout push sur `main` relance le
+build (~5 min).
 
 ## Config SaladCloud
 
