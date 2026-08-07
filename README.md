@@ -18,6 +18,14 @@ Blackwell. Reconstruire n'est pas trivial, ccminer étant du code de 2018 :
 | CUDA 11.8 ne connaît pas `sm_120` (RTX 5090) | Compilation en **PTX `compute_86`** ; le driver de la 5090 le recompile en SASS natif au lancement (forward compatibility) |
 | GCC 11 refuse l'alignement de `sph/blake2s.c` | Stage de build sur **Ubuntu 20.04 / GCC 9** |
 | Le `Makefile.am` cible `compute_30`/`compute_35`, morts depuis CUDA 11 | Réécriture par `sed` vers `compute_86` |
+| Le binaire réclame `libcudart.so.11.0`, absente d'une image runtime 12.x → crash de tous les replicas | Stage runtime sur **CUDA 11.8** lui aussi, + `ldd` de contrôle **dans le stage runtime** |
+
+Sur la compatibilité Blackwell, NVIDIA est explicite dans le
+[Blackwell Compatibility Guide](https://docs.nvidia.com/cuda/archive/12.8.1/blackwell-compatibility-guide/index.html) :
+les applications construites avec les toolkits 2.1 à 12.8 fonctionnent sur
+Blackwell **à condition d'embarquer du PTX**. C'est le cas ici (`code=compute_86`,
+aucun cubin). Seules les PTX d'architectures conditionnelles (`compute_90a`)
+sont exclues — on n'en utilise pas.
 
 Conséquence : quelques secondes de JIT au premier démarrage sur chaque nœud
 (`CUDA_CACHE_MAXSIZE` est réglé pour que le SASS soit mis en cache ensuite).
