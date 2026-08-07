@@ -36,15 +36,26 @@ RUN ./autogen.sh \
 # Pas de "./ccminer --version" ici : libcuda.so.1 vient du driver NVIDIA,
 # absent du conteneur de build. Le binaire ne peut s'executer que sur un hote GPU.
 
-# Le runtime doit etre >= 12 pour que le driver Blackwell charge la lib,
-# mais le binaire compile en PTX 11.8 reste compatible.
-FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04
+# Le runtime DOIT correspondre au CUDA de compilation : le binaire reclame
+# libcudart.so.11.0, que l'image runtime 12.x ne fournit pas (elle n'a que
+# libcudart.so.12). Un runtime 12 ici = "error while loading shared libraries"
+# sur chaque replica. Le driver Blackwell de l'hote, lui, sait executer un
+# binaire CUDA 11.8 et compiler le PTX compute_86 vers sm_120.
+FROM nvidia/cuda:11.8.0-runtime-ubuntu20.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      libcurl4 libjansson4 libgomp1 libssl3 ca-certificates \
+      libcurl4 libjansson4 libgomp1 libssl1.1 ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /src/ccminer /usr/local/bin/ccminer
+
+# Verification DANS LE STAGE RUNTIME : c'est ici que les libs doivent exister.
+# libcuda.so.1 est la seule absence normale (elle vient du driver de l'hote).
+RUN ldd /usr/local/bin/ccminer > /tmp/ldd.txt 2>&1; cat /tmp/ldd.txt; \
+    if grep "not found" /tmp/ldd.txt | grep -qv "libcuda.so.1"; then \
+      echo "ECHEC: dependance manquante dans l'image runtime"; exit 1; \
+    fi; \
+    echo "OK: toutes les libs sont presentes (hors libcuda.so.1, fournie par le driver)"
 
 # Pool Bitcoin. Braiins accepte les tout petits hashrates (compatible Bitaxe/ESP32).
 ENV POOL="stratum+tcp://stratum.braiins.com:3333"
