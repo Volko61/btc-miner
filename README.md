@@ -87,3 +87,21 @@ milliers d'années**. Vérifier la difficulté du jour sur
 elle change toutes les deux semaines.
 
 Coût : 10 × $0.35/h = **$3.50/h**, soit ~$84/jour.
+
+## Dashboard temps réel
+
+`dashboard.py` agrège **tous** les workers du compte (ESP32 + PC + GPU Salad) et
+affiche hashrate total et gains en direct. Stdlib uniquement, aucune install.
+
+```bash
+python3 dashboard.py --demo              # tester l'affichage sans compte
+python3 dashboard.py --token TON_TOKEN    # reel
+```
+
+Puis ouvrir http://127.0.0.1:842
+
+Le token se génère dans Braiins Pool → Settings → **Access Profiles** → activer
+l'accès API. Le script respecte la limite de ~1 requête / 5 s du pool.
+
+Pensé pour être filmé : fond sombre, gros chiffres, compteur qui glisse vers sa
+valeur au lieu de sauter, courbe de hashrate, répartition par machine.
