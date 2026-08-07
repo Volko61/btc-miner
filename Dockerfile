@@ -44,10 +44,11 @@ RUN ./autogen.sh \
 FROM nvidia/cuda:11.8.0-runtime-ubuntu20.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      libcurl4 libjansson4 libgomp1 libssl1.1 ca-certificates \
+      libcurl4 libjansson4 libgomp1 libssl1.1 ca-certificates python3-minimal \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /src/ccminer /usr/local/bin/ccminer
+COPY status.py /usr/local/bin/status.py
 
 # Verification DANS LE STAGE RUNTIME : c'est ici que les libs doivent exister.
 # libcuda.so.1 est la seule absence normale (elle vient du driver de l'hote).
@@ -66,8 +67,12 @@ ENV ALGO="sha256d"
 # Autorise le JIT PTX a mettre en cache le SASS genere au premier lancement
 ENV CUDA_CACHE_MAXSIZE=1073741824
 
-# --api-bind expose le hashrate live sur le port 4068
-EXPOSE 4068
+# 4068 = API TCP native de ccminer (interne au conteneur)
+# 8080 = passerelle HTTP /status, c'est celui a exposer cote Salad
+EXPOSE 8080
 
-CMD exec ccminer -a "$ALGO" -o "$POOL" -u "$WORKER" -p "$PASSWORD" \
-      --api-bind 0.0.0.0:4068 -r -1 -R 10
+# ccminer en avant-plan (c'est lui qui doit faire vivre ou mourir le conteneur),
+# la passerelle en tache de fond.
+CMD python3 /usr/local/bin/status.py & \
+    exec ccminer -a "$ALGO" -o "$POOL" -u "$WORKER" -p "$PASSWORD" \
+      --api-bind 127.0.0.1:4068 -r -1 -R 10
