@@ -11,10 +11,9 @@ import csv
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,20 +26,29 @@ def utc_now():
 
 
 def request_json(url, method="GET", headers=None, body=None, timeout=30):
-    data = None if body is None else json.dumps(body).encode("utf-8")
-    req = urllib.request.Request(url, data=data, method=method)
-    req.add_header("Accept", "application/json")
-    if body is not None:
-        req.add_header("Content-Type", "application/merge-patch+json")
+    # Salad's Cloudflare policy rejects Python urllib's TLS/HTTP fingerprint on
+    # GitHub-hosted runners (Error 1010). curl is preinstalled on those runners
+    # and is also available in the local development environments we support.
+    command = [
+        "curl", "--fail-with-body", "--silent", "--show-error",
+        "--max-time", str(timeout), "--request", method,
+        "--header", "Accept: application/json",
+        "--user-agent", "btc-miner-experiment/1.0",
+    ]
     for key, value in (headers or {}).items():
-        req.add_header(key, value)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            raw = response.read()
-            return json.loads(raw) if raw else None
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "replace")
-        raise RuntimeError(f"{method} {url} returned HTTP {exc.code}: {detail[:500]}") from exc
+        command.extend(("--header", f"{key}: {value}"))
+    if body is not None:
+        command.extend((
+            "--header", "Content-Type: application/merge-patch+json",
+            "--data-binary", json.dumps(body, separators=(",", ":")),
+        ))
+    command.append(url)
+    response = subprocess.run(command, capture_output=True, text=True, timeout=timeout + 5)
+    if response.returncode:
+        detail = (response.stderr + " " + response.stdout).strip()
+        raise RuntimeError(f"{method} {url} failed: {detail[:500]}")
+    raw = response.stdout.strip()
+    return json.loads(raw) if raw else None
 
 
 def state_counts(group):

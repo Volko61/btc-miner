@@ -3,6 +3,9 @@ name: Build miner image
 on:
   push:
     branches: [main]
+    paths:
+      - Dockerfile
+      - status.py
   workflow_dispatch:
 
 jobs:
