@@ -1,0 +1,62 @@
+name: Salad 5090 mining experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      replicas:
+        description: RTX 5090 replica count
+        required: true
+        default: "10"
+      duration_minutes:
+        description: Experiment duration in minutes
+        required: true
+        default: "60"
+      priority:
+        description: SaladCloud priority
+        required: true
+        type: choice
+        default: high
+        options: [high, medium, low, batch]
+
+concurrency:
+  group: salad-mining-experiment
+  cancel-in-progress: false
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scale, sample, and restore SaladCloud
+        env:
+          SALAD_API_KEY: ${{ secrets.SALAD_API_KEY }}
+        run: |
+          python3 salad_experiment.py \
+            --replicas "${{ inputs.replicas }}" \
+            --duration-minutes "${{ inputs.duration_minutes }}" \
+            --priority "${{ inputs.priority }}" \
+            --interval-seconds 10
+
+      - name: Publish run summary
+        if: always()
+        run: |
+          if [ -f results/summary.md ]; then
+            cat results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "# SaladCloud mining experiment" >> "$GITHUB_STEP_SUMMARY"
+            echo "No summary was produced; inspect the job log." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload CSV and summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: salad-mining-${{ github.run_id }}
+          path: results/
+          if-no-files-found: warn
+          retention-days: 90

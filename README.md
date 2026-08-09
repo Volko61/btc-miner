@@ -113,3 +113,22 @@ l'accès API. Le script respecte la limite de ~1 requête / 5 s du pool.
 
 Pensé pour être filmé : fond sombre, gros chiffres, compteur qui glisse vers sa
 valeur au lieu de sauter, courbe de hashrate, répartition par machine.
+
+## Expérience distante 10 × RTX 5090 pendant une heure
+
+Le workflow GitHub Actions **Salad 5090 mining experiment** permet de lancer
+l'expérience sans dépendre du PC local :
+
+1. ajouter le secret de dépôt `SALAD_API_KEY` ;
+2. lancer le workflow avec 10 replicas, 60 minutes et la priorité `high` ;
+3. télécharger l'artefact `salad-mining-…` à la fin du run.
+
+Le workflow échantillonne Salad et `/status` toutes les 10 secondes, publie un
+résumé dans GitHub Actions et conserve le CSV 90 jours. Il mémorise l'état du
+groupe avant l'expérience et restaure son nombre de replicas, sa priorité et
+son état démarré/arrêté dans tous les cas, y compris après une erreur ou une
+interruption normale du runner.
+
+Le Container Gateway répartit les requêtes entre les replicas. Le CSV indique
+donc le hashrate du replica échantillonné et estime le total en le multipliant
+par le nombre de replicas `running` rapporté par l'API SaladCloud.
