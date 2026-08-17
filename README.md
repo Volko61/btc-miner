@@ -57,24 +57,20 @@ build (~5 min).
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `POOL` | `stratum+tcp://stratum.braiins.com:3333` | Pool Bitcoin |
-| `WORKER` | `Volko61.salad` | Nom du worker (visible dans le dashboard) |
-| `PASSWORD` | `x` | Ignoré par Braiins |
+| `POOL` | `stratum+tcp://public-pool.io:3333` | Public Pool, mode solo |
+| `WORKER` | `bc1qv0s8gl3ye2wl9e2dsjzwwpkxvu7dfgvlgdc3yg.salad` | Adresse de paiement + nom du worker |
+| `PASSWORD` | `x` | Valeur conventionnelle Stratum |
 | `ALGO` | `sha256d` | Algo Bitcoin |
 
-Braiins accepte les très petits hashrates (c'est le pool des Bitaxe), donc le
-même compte encaisse l'ESP32, les PC de bureau et les GPU Salad.
-
-Convention de nommage pour tout voir séparément dans un seul dashboard :
-
-- `Volko61.esp32`
-- `Volko61.pc1` … `Volko61.pc10`
-- `Volko61.salad`
+[Public Pool](https://web.public-pool.io/) attend un nom d'utilisateur au format
+`adresse_bitcoin.worker`. Le port `3333` est le mode **solo** : il n'y a pas de
+petits paiements proportionnels. L'adresse ne reçoit la récompense que si l'un
+des mineurs trouve un bloc. Le suffixe `.salad` sert seulement à identifier ce
+groupe dans les logs.
 
 ## Suivi en temps réel
 
-1. **Dashboard Braiins** — hashrate live + satoshis accumulés. C'est le plan de
-   coupe principal.
+1. **Dashboard Public Pool** — hashrate vu par la pool et statut du worker.
 2. **Logs Salad** — ccminer écrit en continu sur stdout :
    `GPU #0: NVIDIA GeForce RTX 5090, 2847.32 MH/s`
 3. **API ccminer** sur le port `4068` (`--api-bind`) — pour alimenter un
@@ -100,10 +96,11 @@ du workflow afin de conserver le prix réellement affiché par Salad le jour du
 test. Seules les secondes où une instance est `running` sont intégrées : le
 temps d'allocation et de téléchargement n'est pas facturé.
 
-## Dashboard temps réel
+## Ancien dashboard Braiins
 
-`dashboard.py` agrège **tous** les workers du compte (ESP32 + PC + GPU Salad) et
-affiche hashrate total et gains en direct. Stdlib uniquement, aucune install.
+`dashboard.py` interroge l'API Braiins historique. Il reste disponible pour les
+anciens tests, mais ne représente pas Public Pool et n'est pas utilisé par
+l'expérience Salad actuelle.
 
 ```bash
 python3 dashboard.py --demo              # tester l'affichage sans compte
@@ -112,8 +109,7 @@ python3 dashboard.py --token TON_TOKEN    # reel
 
 Puis ouvrir http://127.0.0.1:842
 
-Le token se génère dans Braiins Pool → Settings → **Access Profiles** → activer
-l'accès API. Le script respecte la limite de ~1 requête / 5 s du pool.
+Le token se génère dans Braiins Pool → Settings → **Access Profiles**.
 
 Pensé pour être filmé : fond sombre, gros chiffres, compteur qui glisse vers sa
 valeur au lieu de sauter, courbe de hashrate, répartition par machine.
@@ -124,8 +120,10 @@ Le workflow GitHub Actions **Salad 5090 mining experiment** permet de lancer
 l'expérience sans dépendre du PC local :
 
 1. ajouter le secret de dépôt `SALAD_API_KEY` ;
-2. lancer le workflow avec 10 replicas, 60 minutes, la priorité `high` et,
-   pour une nouvelle version, son tag GHCR immuable dans le champ `image` ;
+2. lancer d'abord un smoke test avec 1 replica, puis le workflow avec 10
+   replicas, 60 minutes, la priorité `high` et, pour une nouvelle version, son
+   tag GHCR immuable dans le champ `image` ; les champs `pool` et `worker`
+   rendent la destination explicite dans le run ;
 3. télécharger l'artefact `salad-mining-…` à la fin du run ;
 4. fusionner l'artefact dans les CSV du dashboard avec `archive_results.py`.
 
@@ -137,7 +135,9 @@ après une erreur ou une interruption normale du runner.
 
 Lorsqu'un tag `image` est fourni, le workflow attend que Salad ait fini de le
 préparer avant de démarrer le chronomètre. Après le run, le groupe redevient
-arrêté mais garde cette image validée pour les expériences suivantes.
+arrêté mais garde cette image validée ainsi que la pool et le worker configurés
+pour les expériences suivantes. Le mot de passe Stratum n'est jamais écrit dans
+les CSV.
 
 Le Container Gateway distribue les requêtes entre les replicas. `/status`
 expose donc l'identifiant de machine Salad issu de l'IMDS : le collecteur garde

@@ -132,6 +132,7 @@ class Handler(BaseHTTPRequestHandler):
             "instance_id": STATE["instance_id"],
             "container_group_id": STATE["container_group_id"],
             "identity_error": STATE["identity_error"],
+            "pool": os.environ.get("POOL"),
             "worker": os.environ.get("WORKER"),
             "algo": os.environ.get("ALGO"),
             "hashrate_hs": 0.0,

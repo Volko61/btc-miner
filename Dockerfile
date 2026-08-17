@@ -62,9 +62,10 @@ RUN ldd /usr/local/bin/ccminer > /tmp/ldd.txt 2>&1; cat /tmp/ldd.txt; \
     fi; \
     echo "OK: toutes les libs sont presentes (hors libcuda.so.1, fournie par le driver)"
 
-# Pool Bitcoin. Braiins accepte les tout petits hashrates (compatible Bitaxe/ESP32).
-ENV POOL="stratum+tcp://stratum.braiins.com:3333"
-ENV WORKER="Volko61.salad"
+# Public Pool en mode solo. Le suffixe .salad identifie ces GPU dans les logs.
+# En solo, l'adresse ne recoit quelque chose que si ce mineur trouve un bloc.
+ENV POOL="stratum+tcp://public-pool.io:3333"
+ENV WORKER="bc1qv0s8gl3ye2wl9e2dsjzwwpkxvu7dfgvlgdc3yg.salad"
 ENV PASSWORD="x"
 ENV ALGO="sha256d"
 

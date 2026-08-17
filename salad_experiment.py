@@ -21,7 +21,8 @@ SAMPLE_FIELDS = [
     "desired_replicas", "running_replicas", "allocating_replicas",
     "creating_replicas", "stopping_replicas", "ready_instances",
     "started_instances", "known_instances", "status_sample_ok", "sample_gpu",
-    "sample_machine_id", "sample_instance_id", "sample_worker", "sample_uptime_s",
+    "sample_machine_id", "sample_instance_id", "sample_pool", "sample_worker",
+    "sample_uptime_s",
     "sample_hashrate_hs", "tracked_instances", "tracked_coverage_ratio",
     "tracked_hashrate_hs", "legacy_naive_estimated_total_hashrate_hs",
     "sample_accepted", "sample_rejected",
@@ -41,7 +42,7 @@ INSTANCE_FIELDS = [
 
 RUN_FIELDS = [
     "schema_version", "source", "experiment_id", "started_utc", "finished_utc",
-    "requested_replicas",
+    "pool", "worker", "requested_replicas",
     "priority", "duration_requested_s", "duration_observed_s",
     "price_usd_per_instance_hour", "peak_running_replicas",
     "seconds_to_first_running", "seconds_to_full_capacity",
@@ -92,27 +93,38 @@ def instance_items(response):
     return response.get("instances") or response.get("items") or []
 
 
-def experiment_patch(replicas, priority, image=None):
+def experiment_patch(replicas, priority, image=None, environment_variables=None):
     # L'API renvoie `priority` à la racine, mais le schéma PATCH l'attend dans
     # `container`. Cette asymétrie est volontaire dans l'API SaladCloud.
     container = {"priority": priority}
     if image:
         container["image"] = image
+    if environment_variables is not None:
+        container["environment_variables"] = environment_variables
     return {"replicas": replicas, "container": container}
 
 
-def wait_for_configuration(base, headers, replicas, priority, image, timeout_seconds):
+def wait_for_configuration(
+    base, headers, replicas, priority, image, environment_variables, timeout_seconds
+):
     """Attend la préparation d'image avant de démarrer des instances payantes."""
     deadline = time.monotonic() + timeout_seconds
     last = None
     while time.monotonic() < deadline and not STOP_REQUESTED:
         last = request_json(base, headers=headers)
-        current_image = (last.get("container") or {}).get("image")
+        current_container = last.get("container") or {}
+        current_image = current_container.get("image")
+        current_environment = current_container.get("environment_variables") or {}
+        environment_ready = not environment_variables or all(
+            current_environment.get(key) == value
+            for key, value in environment_variables.items()
+        )
         if (
             not last.get("pending_change")
             and int(last.get("replicas", -1)) == replicas
             and last.get("priority") == priority
             and (not image or current_image == image)
+            and environment_ready
         ):
             return last
         time.sleep(5)
@@ -185,11 +197,13 @@ def build_run_summary(metadata, rows, error=None):
         for row in valid if row["legacy_naive_estimated_total_hashrate_hs"] != ""
     ]
     return {
-        "schema_version": metadata.get("schema_version", "2"),
-        "source": metadata.get("source", "native_v2"),
+        "schema_version": metadata.get("schema_version", "3"),
+        "source": metadata.get("source", "native_v3"),
         "experiment_id": metadata["experiment_id"],
         "started_utc": metadata["started_utc"],
         "finished_utc": metadata.get("finished_utc") or utc_now(),
+        "pool": metadata.get("pool", ""),
+        "worker": metadata.get("worker", ""),
         "requested_replicas": metadata["replicas"],
         "priority": metadata["priority"],
         "duration_requested_s": metadata["duration_minutes"] * 60,
@@ -238,6 +252,8 @@ def write_summaries(markdown_path, run_csv_path, metadata, rows, error=None):
         "",
         f"- Experiment: `{summary['experiment_id']}`",
         f"- Started (UTC): `{summary['started_utc']}`",
+        f"- Pool: `{summary['pool']}`",
+        f"- Worker: `{summary['worker']}`",
         f"- Requested: **{summary['requested_replicas']} replicas**, "
         f"**{summary['priority']} priority**, **{metadata['duration_minutes']} minutes**",
         f"- Peak running replicas: **{summary['peak_running_replicas']}**",
@@ -282,13 +298,24 @@ def run(args):
     original_status, _ = state_counts(original)
     original_replicas = int(original["replicas"])
     original_priority = original.get("priority") or "batch"
-    original_image = (original.get("container") or {}).get("image")
+    original_container = original.get("container") or {}
+    original_image = original_container.get("image")
+    original_environment = original_container.get("environment_variables") or {}
+    target_environment = dict(original_environment)
+    target_environment.update({
+        "POOL": args.pool,
+        "WORKER": args.worker,
+        "PASSWORD": args.password,
+        "ALGO": "sha256d",
+    })
     was_running = original_status not in ("stopped", "stopping")
     metadata = {
-        "schema_version": "2",
-        "source": "native_v2",
+        "schema_version": "3",
+        "source": "native_v3",
         "experiment_id": experiment_id,
         "started_utc": utc_now(),
+        "pool": args.pool,
+        "worker": args.worker,
         "replicas": args.replicas,
         "priority": args.priority,
         "duration_minutes": args.duration_minutes,
@@ -307,14 +334,16 @@ def run(args):
     cumulative_billed_seconds = 0.0
     cumulative_cost = 0.0
     tracked = {}
-    image_prepared = not bool(args.image)
+    configuration_prepared = False
 
     try:
         request_json(
             base,
             method="PATCH",
             headers=headers,
-            body=experiment_patch(args.replicas, args.priority, args.image),
+            body=experiment_patch(
+                args.replicas, args.priority, args.image, target_environment
+            ),
         )
         wait_for_configuration(
             base,
@@ -322,9 +351,10 @@ def run(args):
             args.replicas,
             args.priority,
             args.image,
+            target_environment,
             args.prepare_timeout_seconds,
         )
-        image_prepared = True
+        configuration_prepared = True
         if not was_running:
             request_json(base + "/start", method="POST", headers=headers)
 
@@ -346,8 +376,8 @@ def run(args):
                 timestamp = utc_now()
                 row = {field: "" for field in SAMPLE_FIELDS}
                 row.update({
-                    "schema_version": "2",
-                    "source": "native_v2",
+                    "schema_version": "3",
+                    "source": "native_v3",
                     "experiment_id": experiment_id,
                     "timestamp_utc": timestamp,
                     "elapsed_s": f"{elapsed:.1f}",
@@ -409,6 +439,7 @@ def run(args):
                         "sample_gpu": sample.get("gpu", ""),
                         "sample_machine_id": machine_id,
                         "sample_instance_id": sample.get("instance_id", ""),
+                        "sample_pool": sample.get("pool", ""),
                         "sample_worker": sample.get("worker", ""),
                         "sample_uptime_s": sample.get("uptime_s", ""),
                         "sample_hashrate_hs": f"{sample_hashrate:.3f}",
@@ -439,8 +470,8 @@ def run(args):
                     machine_id = item.get("machine_id") or ""
                     latest = tracked.get(machine_id)
                     instance_writer.writerow({
-                        "schema_version": "2",
-                        "source": "native_v2",
+                        "schema_version": "3",
+                        "source": "native_v3",
                         "experiment_id": experiment_id,
                         "timestamp_utc": timestamp,
                         "elapsed_s": f"{elapsed:.1f}",
@@ -489,12 +520,22 @@ def run(args):
     finally:
         cleanup_errors = []
         try:
-            restore_image = original_image if args.image and not image_prepared else None
+            restore_image = (
+                original_image if args.image and not configuration_prepared else None
+            )
+            restore_environment = (
+                original_environment if not configuration_prepared else None
+            )
             request_json(
                 base,
                 method="PATCH",
                 headers=headers,
-                body=experiment_patch(original_replicas, original_priority, restore_image),
+                body=experiment_patch(
+                    original_replicas,
+                    original_priority,
+                    restore_image,
+                    restore_environment,
+                ),
             )
         except Exception as exc:
             cleanup_errors.append(f"restore config: {exc}")
@@ -527,6 +568,12 @@ def main():
     parser.add_argument("--duration-minutes", type=int, default=60)
     parser.add_argument("--interval-seconds", type=int, default=10)
     parser.add_argument("--price-usd-per-instance-hour", type=float, default=0.35)
+    parser.add_argument("--pool", default="stratum+tcp://public-pool.io:3333")
+    parser.add_argument(
+        "--worker",
+        default="bc1qv0s8gl3ye2wl9e2dsjzwwpkxvu7dfgvlgdc3yg.salad",
+    )
+    parser.add_argument("--password", default="x")
     parser.add_argument(
         "--image",
         help="optional image to prepare and keep on the stopped group after the run",

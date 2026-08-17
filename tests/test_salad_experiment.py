@@ -34,6 +34,24 @@ class SaladExperimentTests(unittest.TestCase):
             },
         )
 
+    def test_pool_environment_can_be_pinned_without_logging_password(self):
+        environment = {
+            "POOL": "stratum+tcp://public-pool.io:3333",
+            "WORKER": "bc1qexample.salad",
+            "PASSWORD": "x",
+            "ALGO": "sha256d",
+        }
+        self.assertEqual(
+            experiment_patch(1, "high", environment_variables=environment),
+            {
+                "replicas": 1,
+                "container": {
+                    "priority": "high",
+                    "environment_variables": environment,
+                },
+            },
+        )
+
     def test_billing_uses_running_replica_trapezoid(self):
         billed, cost = compute_interval_billing(10.0, 20.0, 2, 4, 0.35)
         self.assertEqual(billed, 30.0)
@@ -65,6 +83,8 @@ class SaladExperimentTests(unittest.TestCase):
         metadata = {
             "experiment_id": "legacy",
             "started_utc": "2026-01-01T00:00:00+00:00",
+            "pool": "stratum+tcp://public-pool.io:3333",
+            "worker": "bc1qexample.salad",
             "replicas": 10,
             "priority": "batch",
             "duration_minutes": 1,

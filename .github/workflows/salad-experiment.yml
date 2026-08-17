@@ -25,6 +25,14 @@ on:
         description: Optional pinned GHCR image to prepare and keep after the run
         required: false
         default: ""
+      pool:
+        description: Bitcoin Stratum endpoint
+        required: true
+        default: "stratum+tcp://public-pool.io:3333"
+      worker:
+        description: Bitcoin address and worker suffix
+        required: true
+        default: "bc1qv0s8gl3ye2wl9e2dsjzwwpkxvu7dfgvlgdc3yg.salad"
 
 concurrency:
   group: salad-mining-experiment
@@ -54,6 +62,9 @@ jobs:
             --duration-minutes "${{ inputs.duration_minutes }}" \
             --priority "${{ inputs.priority }}" \
             --price-usd-per-instance-hour "${{ inputs.price_usd_per_instance_hour }}" \
+            --pool "${{ inputs.pool }}" \
+            --worker "${{ inputs.worker }}" \
+            --password "x" \
             --interval-seconds 10 \
             "${image_args[@]}"
 
