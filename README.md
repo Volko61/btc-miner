@@ -40,8 +40,11 @@ authentification :
 ghcr.io/volko61/btc-miner:latest
 ```
 
-`linux/amd64`, 11 couches, ~2.2 Go compressé. Tout push sur `main` relance le
-build (~5 min).
+`linux/amd64`, 8 couches, ~46 MiB compressés. Le stage de compilation reste sur
+l'image CUDA complète, mais le runtime ne copie que `libcudart.so.11.0`, seule
+bibliothèque CUDA liée dynamiquement par ccminer. Cela évite les pulls Salad de
+plusieurs dizaines de minutes observés avec l'ancienne image d'environ 2,2 Go.
+Tout changement du Dockerfile ou de `status.py` relance le build.
 
 ## Config SaladCloud
 
