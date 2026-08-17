@@ -32,19 +32,23 @@ RUN ./autogen.sh \
  && strip ccminer \
  && test -x ccminer \
  && ldd ccminer | grep -q libcudart \
+ && cp -L /usr/local/cuda/lib64/libcudart.so.11.0 /tmp/libcudart.so.11.0 \
  && echo "OK: binaire ccminer produit et lie a CUDA"
 # Pas de "./ccminer --version" ici : libcuda.so.1 vient du driver NVIDIA,
 # absent du conteneur de build. Le binaire ne peut s'executer que sur un hote GPU.
 
-# Le runtime DOIT correspondre au CUDA de compilation : le binaire reclame
-# libcudart.so.11.0, que l'image runtime 12.x ne fournit pas (elle n'a que
-# libcudart.so.12). Un runtime 12 ici = "error while loading shared libraries"
-# sur chaque replica. Le driver Blackwell de l'hote, lui, sait executer un
-# binaire CUDA 11.8 et compiler le PTX compute_86 vers sm_120.
-FROM nvidia/cuda:11.8.0-runtime-ubuntu20.04
+# ccminer ne lie dynamiquement qu'une seule bibliotheque du toolkit CUDA :
+# libcudart.so.11.0. Copier cette bibliotheque dans Ubuntu evite de faire tirer
+# les ~2.2 Go de l'image CUDA runtime complete sur chaque noeud Salad.
+# libcuda.so.1 et nvidia-smi restent injectes par le runtime GPU de l'hote.
+FROM ubuntu:20.04
+
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/lib
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      libcurl4 libjansson4 libgomp1 libssl1.1 ca-certificates python3 \
+      libcurl4 libjansson4 libgomp1 libgmp10 libssl1.1 ca-certificates python3 \
  && rm -rf /var/lib/apt/lists/*
 
 # python3-minimal ne suffit PAS : il n'embarque ni http.server ni json, et
@@ -52,7 +56,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -c "import http.server, json, socket, subprocess; print('OK: stdlib complete')"
 
 COPY --from=build /src/ccminer /usr/local/bin/ccminer
+COPY --from=build /tmp/libcudart.so.11.0 /usr/local/lib/libcudart.so.11.0
 COPY status.py /usr/local/bin/status.py
+
+RUN ldconfig
 
 # Verification DANS LE STAGE RUNTIME : c'est ici que les libs doivent exister.
 # libcuda.so.1 est la seule absence normale (elle vient du driver de l'hote).
