@@ -568,10 +568,10 @@ def main():
     parser.add_argument("--duration-minutes", type=int, default=60)
     parser.add_argument("--interval-seconds", type=int, default=10)
     parser.add_argument("--price-usd-per-instance-hour", type=float, default=0.35)
-    parser.add_argument("--pool", default="stratum+tcp://public-pool.io:3333")
+    parser.add_argument("--pool", default="stratum+tcp://stratum.braiins.com:3333")
     parser.add_argument(
         "--worker",
-        default="bc1qv0s8gl3ye2wl9e2dsjzwwpkxvu7dfgvlgdc3yg.salad",
+        default="volkovolko76.salad",
     )
     parser.add_argument("--password", default="x")
     parser.add_argument(

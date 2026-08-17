@@ -57,20 +57,19 @@ build (~5 min).
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `POOL` | `stratum+tcp://public-pool.io:3333` | Public Pool, mode solo |
-| `WORKER` | `bc1qv0s8gl3ye2wl9e2dsjzwwpkxvu7dfgvlgdc3yg.salad` | Adresse de paiement + nom du worker |
-| `PASSWORD` | `x` | Valeur conventionnelle Stratum |
+| `POOL` | `stratum+tcp://stratum.braiins.com:3333` | Braiins Pool |
+| `WORKER` | `volkovolko76.salad` | Compte Braiins + nom du worker |
+| `PASSWORD` | secret GitHub `BRAIINS_WORKER_PASSWORD` | Non écrit dans le dépôt/CSV |
 | `ALGO` | `sha256d` | Algo Bitcoin |
 
-[Public Pool](https://web.public-pool.io/) attend un nom d'utilisateur au format
-`adresse_bitcoin.worker`. Le port `3333` est le mode **solo** : il n'y a pas de
-petits paiements proportionnels. L'adresse ne reçoit la récompense que si l'un
-des mineurs trouve un bloc. Le suffixe `.salad` sert seulement à identifier ce
-groupe dans les logs.
+[Braiins Pool](https://pool.braiins.com/) attend un identifiant au format
+`nom_du_compte.worker`. Le compte visible dans la configuration utilisateur est
+`volkovolko76`, d'où `volkovolko76.salad`. L'adresse Bitcoin de paiement se règle
+dans le compte Braiins, pas dans le nom du worker.
 
 ## Suivi en temps réel
 
-1. **Dashboard Public Pool** — hashrate vu par la pool et statut du worker.
+1. **Dashboard Braiins** — hashrate vu par la pool, statut et récompenses.
 2. **Logs Salad** — ccminer écrit en continu sur stdout :
    `GPU #0: NVIDIA GeForce RTX 5090, 2847.32 MH/s`
 3. **API ccminer** sur le port `4068` (`--api-bind`) — pour alimenter un
@@ -96,11 +95,9 @@ du workflow afin de conserver le prix réellement affiché par Salad le jour du
 test. Seules les secondes où une instance est `running` sont intégrées : le
 temps d'allocation et de téléchargement n'est pas facturé.
 
-## Ancien dashboard Braiins
+## Dashboard temps réel Braiins
 
-`dashboard.py` interroge l'API Braiins historique. Il reste disponible pour les
-anciens tests, mais ne représente pas Public Pool et n'est pas utilisé par
-l'expérience Salad actuelle.
+`dashboard.py` interroge l'API Braiins et agrège les workers du compte.
 
 ```bash
 python3 dashboard.py --demo              # tester l'affichage sans compte
@@ -119,7 +116,8 @@ valeur au lieu de sauter, courbe de hashrate, répartition par machine.
 Le workflow GitHub Actions **Salad 5090 mining experiment** permet de lancer
 l'expérience sans dépendre du PC local :
 
-1. ajouter le secret de dépôt `SALAD_API_KEY` ;
+1. ajouter les secrets de dépôt `SALAD_API_KEY` et
+   `BRAIINS_WORKER_PASSWORD` ;
 2. lancer d'abord un smoke test avec 1 replica, puis le workflow avec 10
    replicas, 60 minutes, la priorité `high` et, pour une nouvelle version, son
    tag GHCR immuable dans le champ `image` ; les champs `pool` et `worker`

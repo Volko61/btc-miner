@@ -36,9 +36,9 @@ class SaladExperimentTests(unittest.TestCase):
 
     def test_pool_environment_can_be_pinned_without_logging_password(self):
         environment = {
-            "POOL": "stratum+tcp://public-pool.io:3333",
-            "WORKER": "bc1qexample.salad",
-            "PASSWORD": "x",
+            "POOL": "stratum+tcp://stratum.braiins.com:3333",
+            "WORKER": "volkovolko76.salad",
+            "PASSWORD": "secret-value",
             "ALGO": "sha256d",
         }
         self.assertEqual(
@@ -83,8 +83,8 @@ class SaladExperimentTests(unittest.TestCase):
         metadata = {
             "experiment_id": "legacy",
             "started_utc": "2026-01-01T00:00:00+00:00",
-            "pool": "stratum+tcp://public-pool.io:3333",
-            "worker": "bc1qexample.salad",
+            "pool": "stratum+tcp://stratum.braiins.com:3333",
+            "worker": "volkovolko76.salad",
             "replicas": 10,
             "priority": "batch",
             "duration_minutes": 1,
