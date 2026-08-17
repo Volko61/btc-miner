@@ -12,18 +12,30 @@ Sert aussi de sonde de sante : tant que /status repond avec un hashrate > 0,
 le binaire tourne ET le GPU calcule vraiment.
 """
 
+import base64
 import json
 import os
 import socket
 import subprocess
 import threading
 import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 CCMINER_API = ("127.0.0.1", int(os.environ.get("CCMINER_API_PORT", "4068")))
 HTTP_PORT = int(os.environ.get("STATUS_PORT", "8080"))
 
-STATE = {"boot": time.time(), "last_error": None, "gpu": None}
+IMDS_TOKEN_URL = "http://169.254.169.254/v1/token"
+
+STATE = {
+    "boot": time.time(),
+    "last_error": None,
+    "gpu": None,
+    "machine_id": None,
+    "instance_id": None,
+    "container_group_id": None,
+    "identity_error": None,
+}
 
 
 def ask_ccminer(command: str) -> str:
@@ -64,11 +76,62 @@ def detect_gpu():
         return None
 
 
+def decode_jwt_payload(jwt):
+    """Decode les claims publics du JWT IMDS sans exposer le token."""
+    payload = jwt.split(".")[1]
+    payload += "=" * (-len(payload) % 4)
+    return json.loads(base64.urlsafe_b64decode(payload.encode()).decode("utf-8"))
+
+
+def detect_identity():
+    """Identifie le noeud Salad pour agréger le round-robin sans doublons."""
+    try:
+        request = urllib.request.Request(
+            IMDS_TOKEN_URL,
+            headers={"Metadata": "true", "User-Agent": "btc-miner-status/2.0"},
+        )
+        # IMDS est link-local et ne doit jamais passer par un proxy d'environnement.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request, timeout=5) as response:
+            claims = decode_jwt_payload(json.load(response)["jwt"])
+        return {
+            "machine_id": claims.get("salad_machine_id") or claims.get("sub"),
+            "instance_id": (
+                claims.get("salad_container_group_instance_id")
+                or claims.get("salad_instance_id")
+            ),
+            "container_group_id": (
+                claims.get("salad_container_group_id")
+                or claims.get("salad_workload_id")
+            ),
+            "identity_error": None,
+        }
+    except Exception as exc:
+        return {
+            "machine_id": None,
+            "instance_id": None,
+            "container_group_id": None,
+            "identity_error": f"{type(exc).__name__}: {exc}",
+        }
+
+
+def retry_identity():
+    """IMDS peut être brièvement indisponible au tout premier démarrage."""
+    while not STATE["machine_id"]:
+        time.sleep(10)
+        STATE.update(detect_identity())
+    print("[status] identite Salad disponible apres retry", flush=True)
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         payload = {
             "uptime_s": round(time.time() - STATE["boot"], 1),
             "gpu": STATE["gpu"],
+            "machine_id": STATE["machine_id"],
+            "instance_id": STATE["instance_id"],
+            "container_group_id": STATE["container_group_id"],
+            "identity_error": STATE["identity_error"],
             "worker": os.environ.get("WORKER"),
             "algo": os.environ.get("ALGO"),
             "hashrate_hs": 0.0,
@@ -121,7 +184,15 @@ class DualStackHTTPServer(HTTPServer):
 
 def main():
     STATE["gpu"] = detect_gpu()
+    STATE.update(detect_identity())
+    if not STATE["machine_id"]:
+        threading.Thread(target=retry_identity, daemon=True).start()
     print("[status] GPU detecte : %s" % STATE["gpu"], flush=True)
+    print(
+        "[status] identite Salad : machine=%s instance=%s"
+        % (STATE["machine_id"], STATE["instance_id"]),
+        flush=True,
+    )
     print("[status] ecoute sur [::]:%d (double pile)" % HTTP_PORT, flush=True)
     DualStackHTTPServer(("::", HTTP_PORT), Handler).serve_forever()
 

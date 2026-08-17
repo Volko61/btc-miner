@@ -94,7 +94,11 @@ milliers d'années**. Vérifier la difficulté du jour sur
 [mempool.space](https://mempool.space) avant d'annoncer un chiffre précis :
 elle change toutes les deux semaines.
 
-Coût : 10 × $0.35/h = **$3.50/h**, soit ~$84/jour.
+Pour l'expérience `high`, le collecteur utilise par défaut le tarif fourni
+pour la vidéo : 10 × $0.35/h = **$3.50/h** au maximum. Le tarif est un paramètre
+du workflow afin de conserver le prix réellement affiché par Salad le jour du
+test. Seules les secondes où une instance est `running` sont intégrées : le
+temps d'allocation et de téléchargement n'est pas facturé.
 
 ## Dashboard temps réel
 
@@ -121,14 +125,38 @@ l'expérience sans dépendre du PC local :
 
 1. ajouter le secret de dépôt `SALAD_API_KEY` ;
 2. lancer le workflow avec 10 replicas, 60 minutes et la priorité `high` ;
-3. télécharger l'artefact `salad-mining-…` à la fin du run.
+3. télécharger l'artefact `salad-mining-…` à la fin du run ;
+4. fusionner l'artefact dans les CSV du dashboard avec `archive_results.py`.
 
-Le workflow échantillonne Salad et `/status` toutes les 10 secondes, publie un
-résumé dans GitHub Actions et conserve le CSV 90 jours. Il mémorise l'état du
-groupe avant l'expérience et restaure son nombre de replicas, sa priorité et
-son état démarré/arrêté dans tous les cas, y compris après une erreur ou une
-interruption normale du runner.
+Le workflow échantillonne Salad, la liste des instances et `/status` toutes les
+10 secondes, publie un résumé dans GitHub Actions et conserve les CSV 90 jours.
+Il mémorise l'état du groupe avant l'expérience et restaure son nombre de
+replicas, sa priorité et son état démarré/arrêté dans tous les cas, y compris
+après une erreur ou une interruption normale du runner.
 
-Le Container Gateway répartit les requêtes entre les replicas. Le CSV indique
-donc le hashrate du replica échantillonné et estime le total en le multipliant
-par le nombre de replicas `running` rapporté par l'API SaladCloud.
+Le Container Gateway distribue les requêtes entre les replicas. `/status`
+expose donc l'identifiant de machine Salad issu de l'IMDS : le collecteur garde
+le dernier relevé de chaque machine active et les somme seulement lorsque la
+couverture est complète. Cela évite l'ancienne extrapolation trompeuse
+« un échantillon × nombre de replicas ».
+
+L'artefact contient :
+
+- `salad-samples-….csv` : puissance, allocation, couverture, GPU-heures et coût
+  cumulé au fil du temps ;
+- `salad-instances-….csv` : état, métriques CPU/RAM et dernier hashrate connu de
+  chaque instance ;
+- `salad-runs-….csv` : une ligne récapitulative par expérience.
+
+Archivage local idempotent vers le projet dashboard :
+
+```bash
+python archive_results.py \
+  --artifact-dir CHEMIN_ARTEFACT \
+  --dashboard-data ../Dashboard/bc-dashboard/data
+```
+
+Les fichiers consolidés sont `salad_samples.csv`, `salad_instances.csv` et
+`salad_runs.csv`. Le run historique du 9 août est importable : sa vieille
+extrapolation est conservée dans des colonnes `legacy_*`, jamais confondue avec
+un agrégat mesuré.

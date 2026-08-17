@@ -17,6 +17,10 @@ on:
         type: choice
         default: high
         options: [high, medium, low, batch]
+      price_usd_per_instance_hour:
+        description: USD per running RTX 5090 hour (for cost tracking)
+        required: true
+        default: "0.35"
 
 concurrency:
   group: salad-mining-experiment
@@ -25,7 +29,7 @@ concurrency:
 jobs:
   experiment:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 360
     permissions:
       contents: read
 
@@ -40,6 +44,7 @@ jobs:
             --replicas "${{ inputs.replicas }}" \
             --duration-minutes "${{ inputs.duration_minutes }}" \
             --priority "${{ inputs.priority }}" \
+            --price-usd-per-instance-hour "${{ inputs.price_usd_per_instance_hour }}" \
             --interval-seconds 10
 
       - name: Publish run summary
