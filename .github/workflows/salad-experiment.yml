@@ -21,6 +21,10 @@ on:
         description: USD per running RTX 5090 hour (for cost tracking)
         required: true
         default: "0.35"
+      image:
+        description: Optional pinned GHCR image to prepare and keep after the run
+        required: false
+        default: ""
 
 concurrency:
   group: salad-mining-experiment
@@ -39,13 +43,19 @@ jobs:
       - name: Scale, sample, and restore SaladCloud
         env:
           SALAD_API_KEY: ${{ secrets.SALAD_API_KEY }}
+          EXPERIMENT_IMAGE: ${{ inputs.image }}
         run: |
+          image_args=()
+          if [ -n "$EXPERIMENT_IMAGE" ]; then
+            image_args=(--image "$EXPERIMENT_IMAGE")
+          fi
           python3 salad_experiment.py \
             --replicas "${{ inputs.replicas }}" \
             --duration-minutes "${{ inputs.duration_minutes }}" \
             --priority "${{ inputs.priority }}" \
             --price-usd-per-instance-hour "${{ inputs.price_usd_per_instance_hour }}" \
-            --interval-seconds 10
+            --interval-seconds 10 \
+            "${image_args[@]}"
 
       - name: Publish run summary
         if: always()

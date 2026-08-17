@@ -124,7 +124,8 @@ Le workflow GitHub Actions **Salad 5090 mining experiment** permet de lancer
 l'expérience sans dépendre du PC local :
 
 1. ajouter le secret de dépôt `SALAD_API_KEY` ;
-2. lancer le workflow avec 10 replicas, 60 minutes et la priorité `high` ;
+2. lancer le workflow avec 10 replicas, 60 minutes, la priorité `high` et,
+   pour une nouvelle version, son tag GHCR immuable dans le champ `image` ;
 3. télécharger l'artefact `salad-mining-…` à la fin du run ;
 4. fusionner l'artefact dans les CSV du dashboard avec `archive_results.py`.
 
@@ -133,6 +134,10 @@ Le workflow échantillonne Salad, la liste des instances et `/status` toutes les
 Il mémorise l'état du groupe avant l'expérience et restaure son nombre de
 replicas, sa priorité et son état démarré/arrêté dans tous les cas, y compris
 après une erreur ou une interruption normale du runner.
+
+Lorsqu'un tag `image` est fourni, le workflow attend que Salad ait fini de le
+préparer avant de démarrer le chronomètre. Après le run, le groupe redevient
+arrêté mais garde cette image validée pour les expériences suivantes.
 
 Le Container Gateway distribue les requêtes entre les replicas. `/status`
 expose donc l'identifiant de machine Salad issu de l'IMDS : le collecteur garde

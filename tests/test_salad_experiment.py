@@ -22,6 +22,18 @@ class SaladExperimentTests(unittest.TestCase):
             {"replicas": 10, "container": {"priority": "high"}},
         )
 
+    def test_image_can_be_pinned_in_same_safe_patch(self):
+        self.assertEqual(
+            experiment_patch(10, "high", "ghcr.io/acme/miner:sha"),
+            {
+                "replicas": 10,
+                "container": {
+                    "priority": "high",
+                    "image": "ghcr.io/acme/miner:sha",
+                },
+            },
+        )
+
     def test_billing_uses_running_replica_trapezoid(self):
         billed, cost = compute_interval_billing(10.0, 20.0, 2, 4, 0.35)
         self.assertEqual(billed, 30.0)

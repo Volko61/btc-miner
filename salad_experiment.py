@@ -92,10 +92,35 @@ def instance_items(response):
     return response.get("instances") or response.get("items") or []
 
 
-def experiment_patch(replicas, priority):
+def experiment_patch(replicas, priority, image=None):
     # L'API renvoie `priority` à la racine, mais le schéma PATCH l'attend dans
     # `container`. Cette asymétrie est volontaire dans l'API SaladCloud.
-    return {"replicas": replicas, "container": {"priority": priority}}
+    container = {"priority": priority}
+    if image:
+        container["image"] = image
+    return {"replicas": replicas, "container": container}
+
+
+def wait_for_configuration(base, headers, replicas, priority, image, timeout_seconds):
+    """Attend la préparation d'image avant de démarrer des instances payantes."""
+    deadline = time.monotonic() + timeout_seconds
+    last = None
+    while time.monotonic() < deadline and not STOP_REQUESTED:
+        last = request_json(base, headers=headers)
+        current_image = (last.get("container") or {}).get("image")
+        if (
+            not last.get("pending_change")
+            and int(last.get("replicas", -1)) == replicas
+            and last.get("priority") == priority
+            and (not image or current_image == image)
+        ):
+            return last
+        time.sleep(5)
+    detail = "no state returned" if not last else (
+        f"pending={last.get('pending_change')} replicas={last.get('replicas')} "
+        f"priority={last.get('priority')} image={(last.get('container') or {}).get('image')}"
+    )
+    raise TimeoutError(f"container group configuration was not ready: {detail}")
 
 
 def install_signal_handlers():
@@ -257,6 +282,7 @@ def run(args):
     original_status, _ = state_counts(original)
     original_replicas = int(original["replicas"])
     original_priority = original.get("priority") or "batch"
+    original_image = (original.get("container") or {}).get("image")
     was_running = original_status not in ("stopped", "stopping")
     metadata = {
         "schema_version": "2",
@@ -269,28 +295,41 @@ def run(args):
         "price_usd_per_instance_hour": args.price_usd_per_instance_hour,
         "original_replicas": original_replicas,
         "original_priority": original_priority,
+        "original_image": original_image,
         "original_status": original_status,
     }
 
     rows = []
     experiment_error = None
-    started = time.monotonic()
+    started = None
     previous_sample_time = None
     previous_running = None
     cumulative_billed_seconds = 0.0
     cumulative_cost = 0.0
     tracked = {}
+    image_prepared = not bool(args.image)
 
     try:
         request_json(
             base,
             method="PATCH",
             headers=headers,
-            body=experiment_patch(args.replicas, args.priority),
+            body=experiment_patch(args.replicas, args.priority, args.image),
         )
+        wait_for_configuration(
+            base,
+            headers,
+            args.replicas,
+            args.priority,
+            args.image,
+            args.prepare_timeout_seconds,
+        )
+        image_prepared = True
         if not was_running:
             request_json(base + "/start", method="POST", headers=headers)
 
+        metadata["started_utc"] = utc_now()
+        started = time.monotonic()
         deadline = started + args.duration_minutes * 60
         with (
             sample_path.open("w", newline="", encoding="utf-8") as sample_file,
@@ -450,11 +489,12 @@ def run(args):
     finally:
         cleanup_errors = []
         try:
+            restore_image = original_image if args.image and not image_prepared else None
             request_json(
                 base,
                 method="PATCH",
                 headers=headers,
-                body=experiment_patch(original_replicas, original_priority),
+                body=experiment_patch(original_replicas, original_priority, restore_image),
             )
         except Exception as exc:
             cleanup_errors.append(f"restore config: {exc}")
@@ -487,6 +527,11 @@ def main():
     parser.add_argument("--duration-minutes", type=int, default=60)
     parser.add_argument("--interval-seconds", type=int, default=10)
     parser.add_argument("--price-usd-per-instance-hour", type=float, default=0.35)
+    parser.add_argument(
+        "--image",
+        help="optional image to prepare and keep on the stopped group after the run",
+    )
+    parser.add_argument("--prepare-timeout-seconds", type=int, default=900)
     parser.add_argument("--output-dir", default="results")
     args = parser.parse_args()
     if not 1 <= args.replicas <= 500:
@@ -497,6 +542,8 @@ def main():
         parser.error("--interval-seconds must be between 5 and 300")
     if args.price_usd_per_instance_hour < 0:
         parser.error("--price-usd-per-instance-hour must be non-negative")
+    if not 30 <= args.prepare_timeout_seconds <= 1800:
+        parser.error("--prepare-timeout-seconds must be between 30 and 1800")
     run(args)
 
 
