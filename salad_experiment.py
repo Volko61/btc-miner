@@ -565,7 +565,7 @@ def main():
     )
     parser.add_argument("--replicas", type=int, default=10)
     parser.add_argument("--priority", choices=("high", "medium", "low", "batch"), default="high")
-    parser.add_argument("--duration-minutes", type=int, default=60)
+    parser.add_argument("--duration-minutes", type=int, default=359)
     parser.add_argument("--interval-seconds", type=int, default=10)
     parser.add_argument("--price-usd-per-instance-hour", type=float, default=0.35)
     parser.add_argument("--pool", default="stratum+tcp://stratum.braiins.com:3333")
