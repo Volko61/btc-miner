@@ -166,3 +166,22 @@ Les fichiers consolidés sont `salad_samples.csv`, `salad_instances.csv` et
 `salad_runs.csv`. Le run historique du 9 août est importable : sa vieille
 extrapolation est conservée dans des colonnes `legacy_*`, jamais confondue avec
 un agrégat mesuré.
+
+### Hashrate par machine depuis les logs
+
+La passerelle HTTP ne sert qu'une instance par requête : sur un parc de dix
+cartes, elle en manque toujours une partie. Les logs Salad, eux, couvrent chaque
+nœud. `archive_salad_logs.py` les rejoue et écrit deux CSV supplémentaires :
+
+```bash
+SALAD_API_KEY=... python archive_salad_logs.py   --experiment-id 20260817T230237Z   --start-time 2026-08-17T23:03:00Z   --end-time 2026-08-18T00:04:00Z   --dashboard-data ../Dashboard/bc-dashboard/data
+```
+
+- `salad_miner_events.csv` : un événement `ccminer` par ligne (hashrate, share,
+  erreur Stratum) avec `machine_id` ;
+- `salad_machines.csv` : moyenne stable, pic et erreurs par machine ;
+- les colonnes `log_derived_*` de `salad_runs.csv` sont mises à jour, dont
+  l'agrégat vérifié qui couvre bien toutes les cartes.
+
+Le dashboard lit ces fichiers directement : c'est cet agrégat, pas
+l'échantillonnage HTTP, qui alimente la courbe et l'encart du run cloud.
