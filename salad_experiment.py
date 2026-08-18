@@ -51,6 +51,9 @@ RUN_FIELDS = [
     "mean_complete_tracked_hashrate_hs", "peak_tracked_hashrate_hs",
     "peak_sample_hashrate_hs", "legacy_mean_naive_estimated_total_hashrate_hs",
     "legacy_peak_naive_estimated_total_hashrate_hs", "unique_machines_sampled", "error",
+    "log_derived_machines", "log_derived_mean_aggregate_hashrate_hs",
+    "log_derived_peak_sum_hashrate_hs", "log_auth_errors",
+    "log_subscribe_timeouts",
 ]
 
 
@@ -232,6 +235,11 @@ def build_run_summary(metadata, rows, error=None):
         ),
         "unique_machines_sampled": len(machines),
         "error": error or "",
+        "log_derived_machines": "",
+        "log_derived_mean_aggregate_hashrate_hs": "",
+        "log_derived_peak_sum_hashrate_hs": "",
+        "log_auth_errors": "",
+        "log_subscribe_timeouts": "",
     }
 
 

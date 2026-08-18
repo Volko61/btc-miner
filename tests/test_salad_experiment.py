@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 import status
+from archive_salad_logs import build_rows
 from archive_results import migrate_legacy
 from salad_experiment import (
     build_run_summary,
@@ -134,6 +135,26 @@ class StatusIdentityTests(unittest.TestCase):
         claims = {"sub": "machine-1", "salad_container_group_id": "group-1"}
         encoded = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
         self.assertEqual(status.decode_jwt_payload(f"header.{encoded}.signature"), claims)
+
+
+class SaladLogArchiveTests(unittest.TestCase):
+    def test_transient_hashrate_is_kept_as_event_but_excluded_from_stable_mean(self):
+        def item(timestamp, message):
+            return {
+                "time": timestamp,
+                "text_log": message,
+                "resource": {"labels": {"machine_id": "machine-1", "instance_id": "i-1"}},
+            }
+
+        events, machines = build_rows("run-1", [
+            item("2026-01-01T00:00:00Z", "GPU #0: RTX 5090, 81.03 MH/s"),
+            item("2026-01-01T00:00:04Z", "GPU #0: RTX 5090, 11.50 GH/s"),
+            item("2026-01-01T00:00:08Z", "GPU #0: RTX 5090, 11.70 GH/s"),
+        ])
+        self.assertEqual(len(events), 3)
+        self.assertEqual(machines[0]["hashrate_samples"], 3)
+        self.assertEqual(machines[0]["stable_hashrate_samples"], 2)
+        self.assertEqual(machines[0]["mean_stable_hashrate_hs"], "11600000000.000")
 
 
 if __name__ == "__main__":
